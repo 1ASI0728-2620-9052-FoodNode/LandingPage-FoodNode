@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  @apply bg-cream font-sans text-brown antialiased;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 { text-wrap: balance; }
+p { text-wrap: pretty; }
+
+::selection { background: #C8F06E; color: #492906; }
+
+/* Foco visible para teclado (RNF-05) */
+:focus-visible { outline: 3px solid #5A7D00; outline-offset: 3px; border-radius: 8px; }
+input:focus-visible, select:focus-visible { outline: none; }
+
+/* Trama hexagonal de fondo (SVG inline, sin peticiones externas) */
+.hex-bg {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='97' viewBox='0 0 56 97'%3E%3Cpath d='M28 2 54 17v30L28 62 2 47V17Z M28 62v35 M2 47 0 48 M54 47l2 1' fill='none' stroke='%23EBD3C3' stroke-width='1.2'/%3E%3C/svg%3E");
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 85% 30%, #000 0%, transparent 70%);
+  mask-image: radial-gradient(ellipse 80% 70% at 85% 30%, #000 0%, transparent 70%);
+}
+.hex-bg-light {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='97' viewBox='0 0 56 97'%3E%3Cpath d='M28 2 54 17v30L28 62 2 47V17Z M28 62v35' fill='none' stroke='%23FFF1E8' stroke-opacity='.35' stroke-width='1.2'/%3E%3C/svg%3E");
+}
+
+/* Pulso del radar */
+@keyframes pulse-ring {
+  0%   { transform: scale(.05); opacity: .75; }
+  100% { transform: scale(1);   opacity: 0; }
+}
+.pulse-ring { transform-box: fill-box; transform-origin: center; animation: pulse-ring 4s ease-out 1.6s infinite; }
+
+/* Cinta de platos */
+@keyframes marquee { to { transform: translateX(-50%); } }
+.marquee { animation: marquee 38s linear infinite; }
+.marquee:hover { animation-play-state: paused; }
+
+/* Indicador de escritura de Lía */
+@keyframes typing { 0%, 80%, 100% { transform: translateY(0); opacity: .4; } 40% { transform: translateY(-4px); opacity: 1; } }
+.typing-dot { animation: typing 1s ease-in-out infinite; }
+
+/* Respeto por reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .pulse-ring, .marquee, .typing-dot { animation: none !important; }
+  * { transition-duration: .01ms !important; }
+}
