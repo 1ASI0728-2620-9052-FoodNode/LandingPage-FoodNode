@@ -1,5 +1,6 @@
 "use client";
 
+import { webappUrl } from "@/lib/webapp";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
@@ -54,9 +55,9 @@ export default function Navbar() {
 
         <div className="flex items-center gap-2">
           <LangSwitch />
-          <button type="button" onClick={() => openAuth("login")} className="hidden rounded-full px-4 py-2 text-sm font-semibold text-brown hover:bg-peach sm:block">
+          <a href={webappUrl("/login")} className="hidden rounded-full px-4 py-2 text-sm font-semibold text-brown hover:bg-peach sm:block">
             {t.nav.login}
-          </button>
+          </a>
           <button type="button" onClick={() => openAuth("register")} className="hidden rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:bg-brown sm:block">
             {t.nav.signup}
           </button>
@@ -91,7 +92,7 @@ export default function Navbar() {
                 </li>
               ))}
               <li className="mt-2 flex gap-2">
-                <button type="button" onClick={() => { setOpen(false); openAuth("login"); }} className="flex-1 rounded-full border border-line bg-white py-3 font-semibold text-brown">{t.nav.login}</button>
+                <a href={webappUrl("/login")} onClick={() => setOpen(false)} className="flex-1 rounded-full border border-line bg-white py-3 text-center font-semibold text-brown">{t.nav.login}</a>
                 <button type="button" onClick={() => { setOpen(false); openAuth("register"); }} className="flex-1 rounded-full bg-primary py-3 font-bold text-white">{t.nav.signup}</button>
               </li>
             </ul>

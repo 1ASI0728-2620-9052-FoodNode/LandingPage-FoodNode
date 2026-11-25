@@ -3,10 +3,11 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { Search, MapPin } from "lucide-react";
 import { DISTRICTS } from "@/lib/data";
+import { EXPLORE_LABEL, webappUrl } from "@/lib/webapp";
 import { useApp } from "./Providers";
 
 export default function Hero() {
-  const { t, setQuery } = useApp();
+  const { t, lang, setQuery } = useApp();
   const reduce = useReducedMotion();
 
   const words = t.hero.h1.split(" ");
@@ -76,6 +77,12 @@ export default function Hero() {
           <motion.p initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.4 }} className="mt-4 flex items-center gap-2 text-sm font-medium text-leaf">
             <span className="h-2 w-2 rounded-full bg-leaf" aria-hidden="true" /> {t.hero.note}
           </motion.p>
+          <a
+            href={webappUrl("/radar")}
+            className="mt-6 inline-flex items-center rounded-full border-2 border-primary px-6 py-3 text-sm font-bold text-primary transition hover:bg-primary hover:text-white"
+          >
+            {EXPLORE_LABEL[lang as "es" | "en"] ?? EXPLORE_LABEL.es}
+          </a>
         </div>
 
         <motion.div
