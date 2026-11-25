@@ -1,31 +1,65 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CircleCheck, X } from "lucide-react";
 import { useApp, type AuthMode, type Role } from "./Providers";
+import { IAM_ROLE, IamError, login, register, type IamErrorKind } from "@/lib/iamClient";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const PASS = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+// IAM: 8 a 72 caracteres, con al menos una letra y un número.
+const PASS = /^(?=.*[A-Za-z])(?=.*\d).{8,72}$/;
+// IAM: 3 a 30 caracteres entre letras, números y guion bajo.
+const USERNAME = /^[A-Za-z0-9_]{3,30}$/;
+
+type FieldKey = "name" | "username" | "email" | "password";
+
+/** Tipo de fallo de IAM -> clave del mensaje traducido en t.auth. */
+const ERROR_TEXT = {
+  invalid: "errInvalid",
+  unauthorized: "errUnauthorized",
+  forbidden: "errForbidden",
+  conflict: "errConflict",
+  tooMany: "errTooMany",
+  server: "errServer",
+  network: "errNetwork",
+  config: "errConfig"
+} as const satisfies Record<IamErrorKind, string>;
 
 export default function AuthModal() {
-  const { t, auth, closeAuth, openAuth } = useApp();
+  const { t, auth, closeAuth, openAuth, setSession } = useApp();
   const { open, mode, role } = auth;
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
-  const [errors, setErrors] = useState<Partial<Record<"name" | "email" | "password", string>>>({});
+  const [form, setForm] = useState({ name: "", username: "", email: "", password: "" });
+  const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const lastFocus = useRef<HTMLElement | null>(null);
+  const alertRef = useRef<HTMLParagraphElement>(null);
+  // Identifica la petición vigente: la respuesta de una anterior (modal cerrado o reabierto) se ignora.
+  const requestId = useRef(0);
+  const discardPendingRequest = useCallback(() => { requestId.current++; }, []);
 
   // Reiniciar al abrir, devolver el foco al cerrar, bloquear scroll
   useEffect(() => {
     if (!open) return;
     lastFocus.current = document.activeElement as HTMLElement;
-    setErrors({}); setDone(null);
+    setErrors({}); setFormError(null); setSubmitting(false); setDone(null);
+    discardPendingRequest();
     document.body.style.overflow = "hidden";
     const id = setTimeout(() => dialogRef.current?.querySelector<HTMLElement>("input, button")?.focus(), 60);
-    return () => { clearTimeout(id); document.body.style.overflow = ""; lastFocus.current?.focus(); };
-  }, [open]);
+    return () => {
+      clearTimeout(id);
+      discardPendingRequest();
+      setForm((f) => ({ ...f, password: "" }));
+      document.body.style.overflow = "";
+      lastFocus.current?.focus();
+    };
+  }, [open, discardPendingRequest]);
+
+  // Al cambiar entre registro e inicio de sesión, el error del servidor ya no aplica
+  useEffect(() => { setFormError(null); }, [mode]);
 
   // Esc para cerrar y focus trap
   useEffect(() => {
@@ -43,22 +77,46 @@ export default function AuthModal() {
     return () => document.removeEventListener("keydown", onKey);
   }, [open, closeAuth]);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     const err: typeof errors = {};
-    if (mode === "register" && form.name.trim().length < 2) err.name = t.auth.errName;
-    if (!EMAIL.test(form.email)) err.email = t.auth.errEmail;
+    const name = form.name.trim();
+    const username = form.username.trim();
+    const email = form.email.trim();
+    if (mode === "register" && (name.length < 2 || name.length > 150)) err.name = t.auth.errName;
+    if (mode === "register" && !USERNAME.test(username)) err.username = t.auth.errUsername;
+    if (!EMAIL.test(email)) err.email = t.auth.errEmail;
     if (!PASS.test(form.password)) err.password = t.auth.errPass;
     setErrors(err);
+    setFormError(null);
     if (Object.keys(err).length) {
       requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>("[aria-invalid='true']")?.focus());
       return;
     }
-    // TODO: conectar con el servicio de identidad (IAM) de Foodly
-    setDone(mode === "register" ? t.auth.okD.replace("{n}", form.name.trim().split(" ")[0]) : t.auth.okLogin);
+
+    const id = ++requestId.current;
+    setSubmitting(true);
+    try {
+      const result = mode === "register"
+        ? await register({ name, username, email, password: form.password, role: IAM_ROLE[role] })
+        : await login({ email, password: form.password });
+      if (id !== requestId.current) return;
+      setSession(result); // solo en memoria: nada de localStorage
+      setForm((f) => ({ ...f, password: "" }));
+      setDone(mode === "register" ? t.auth.okD.replace("{n}", name.split(" ")[0]) : t.auth.okLogin);
+    } catch (error) {
+      if (id !== requestId.current) return;
+      const kind: IamErrorKind = error instanceof IamError ? error.kind : "server";
+      setFormError(t.auth[ERROR_TEXT[kind]]);
+      // El foco pasa al aviso para que el lector de pantalla lo anuncie y el teclado no se pierda
+      requestAnimationFrame(() => alertRef.current?.focus());
+    } finally {
+      if (id === requestId.current) setSubmitting(false);
+    }
   }
 
-  const field = (key: "name" | "email" | "password", label: string, type: string, hint?: string) => (
+  const field = (key: FieldKey, label: string, type: string, hint?: string) => (
     <div>
       <label htmlFor={`f-${key}`} className="text-sm font-bold text-brown">{label}</label>
       <input
@@ -68,7 +126,7 @@ export default function AuthModal() {
         onChange={(e) => setForm({ ...form, [key]: e.target.value })}
         aria-invalid={!!errors[key]}
         aria-describedby={errors[key] ? `e-${key}` : hint ? `h-${key}` : undefined}
-        autoComplete={key === "name" ? "name" : key === "email" ? "email" : mode === "login" ? "current-password" : "new-password"}
+        autoComplete={key === "name" ? "name" : key === "username" ? "username" : key === "email" ? "email" : mode === "login" ? "current-password" : "new-password"}
         className={`mt-1 w-full rounded-xl border-2 bg-cream px-4 py-3 font-medium text-brown focus:border-primary focus:outline-none ${errors[key] ? "border-danger" : "border-line"}`}
       />
       {errors[key] ? <p id={`e-${key}`} className="mt-1 text-sm font-semibold text-danger">{errors[key]}</p> : hint ? <p id={`h-${key}`} className="mt-1 text-xs text-brown-soft">{hint}</p> : null}
@@ -102,7 +160,7 @@ export default function AuthModal() {
                 <button type="button" onClick={closeAuth} className="mt-6 w-full rounded-full bg-primary py-3.5 font-bold text-white hover:bg-brown">{t.auth.done}</button>
               </div>
             ) : (
-              <form onSubmit={submit} noValidate className="space-y-4">
+              <form onSubmit={submit} noValidate aria-busy={submitting} className="space-y-4">
                 <div className="pr-10">
                   <h2 id="auth-title" className="font-display text-2xl font-extrabold text-brown">{mode === "register" ? t.auth.registerT : t.auth.loginT}</h2>
                   <p className="mt-1 text-brown-soft">{mode === "register" ? t.auth.registerSub : t.auth.loginSub}</p>
@@ -125,18 +183,22 @@ export default function AuthModal() {
                 {Object.keys(errors).length > 0 && (
                   <p role="alert" className="rounded-xl bg-danger/10 px-4 py-2.5 text-sm font-bold text-danger">{t.auth.errTitle}</p>
                 )}
+                {formError && (
+                  <p ref={alertRef} role="alert" tabIndex={-1} className="rounded-xl bg-danger/10 px-4 py-2.5 text-sm font-bold text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-danger">{formError}</p>
+                )}
 
                 {mode === "register" && field("name", t.auth.name, "text")}
+                {mode === "register" && field("username", t.auth.username, "text", t.auth.usernameHint)}
                 {field("email", t.auth.email, "email")}
                 {field("password", t.auth.password, "password", mode === "register" ? t.auth.passHint : undefined)}
 
-                <button type="submit" className="w-full rounded-full bg-primary py-3.5 text-base font-bold text-white shadow-soft transition hover:bg-brown">
-                  {mode === "register" ? t.auth.submitReg : t.auth.submitLogin}
+                {/* aria-disabled (no disabled) para que el botón conserve el foco mientras se envía */}
+                <button type="submit" aria-disabled={submitting} className={`w-full rounded-full bg-primary py-3.5 text-base font-bold text-white shadow-soft transition hover:bg-brown ${submitting ? "cursor-wait opacity-70" : ""}`}>
+                  {submitting ? t.auth.submitting : mode === "register" ? t.auth.submitReg : t.auth.submitLogin}
                 </button>
                 <button type="button" onClick={() => openAuth(mode === "register" ? "login" : "register", role)} className="w-full text-center text-sm font-semibold text-primary hover:underline">
                   {mode === "register" ? t.auth.toLogin : t.auth.toRegister}
                 </button>
-                <p className="text-center text-xs text-brown/50">{t.auth.demo}</p>
               </form>
             )}
           </motion.div>

@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { dict, type Dict, type Lang } from "@/lib/i18n";
+import type { AuthResult } from "@/lib/iamClient";
 
 export type AuthMode = "register" | "login";
 export type Role = "explorer" | "owner";
@@ -13,6 +14,9 @@ type Ctx = {
   auth: { open: boolean; mode: AuthMode; role: Role };
   openAuth: (mode?: AuthMode, role?: Role) => void;
   closeAuth: () => void;
+  /** Sesión de IAM: solo en memoria (estado de React). Se pierde al recargar la página. */
+  session: AuthResult | null;
+  setSession: (s: AuthResult | null) => void;
   query: { craving: string; district: string };
   setQuery: (q: { craving: string; district: string }) => void;
 };
@@ -23,6 +27,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>("es");
   const [auth, setAuth] = useState<Ctx["auth"]>({ open: false, mode: "register", role: "explorer" });
   const [query, setQuery] = useState({ craving: "", district: "" });
+  const [session, setSession] = useState<AuthResult | null>(null);
 
   // Cambio de idioma instantáneo, sin recargar (RNF-04)
   const setLang = useCallback((l: Lang) => {
@@ -43,8 +48,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const closeAuth = useCallback(() => setAuth((a) => ({ ...a, open: false })), []);
 
   const value = useMemo(
-    () => ({ lang, setLang, t: dict[lang], auth, openAuth, closeAuth, query, setQuery }),
-    [lang, setLang, auth, openAuth, closeAuth, query]
+    () => ({ lang, setLang, t: dict[lang], auth, openAuth, closeAuth, session, setSession, query, setQuery }),
+    [lang, setLang, auth, openAuth, closeAuth, session, query]
   );
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }
